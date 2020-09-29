@@ -70,18 +70,18 @@ void display_init() {
     ////////////////
     // setup pins //
     ////////////////
-	nrf_gpio_cfg_output(LCD_MOSI);
-	nrf_gpio_cfg_output(LCD_SCK);
-	nrf_gpio_cfg_input(LCD_MISO, NRF_GPIO_PIN_NOPULL);
+    nrf_gpio_cfg_output(LCD_MOSI);
+    nrf_gpio_cfg_output(LCD_SCK);
+    nrf_gpio_cfg_input(LCD_MISO, NRF_GPIO_PIN_NOPULL);
 
-	nrf_gpio_cfg_output(LCD_SELECT);
-	nrf_gpio_cfg_output(LCD_COMMAND);
-	nrf_gpio_cfg_output(LCD_RESET);
+    nrf_gpio_cfg_output(LCD_SELECT);
+    nrf_gpio_cfg_output(LCD_COMMAND);
+    nrf_gpio_cfg_output(LCD_RESET);
 
-	nrf_gpio_pin_write(LCD_SELECT,1);
-	nrf_gpio_pin_write(LCD_COMMAND,1);
-	nrf_gpio_pin_write(LCD_RESET,1);
-    
+    nrf_gpio_pin_write(LCD_SELECT,1);
+    nrf_gpio_pin_write(LCD_COMMAND,1);
+    nrf_gpio_pin_write(LCD_RESET,1);
+
 
     ///////////////
     // spi setup //
@@ -100,31 +100,31 @@ void display_init() {
 
 
     ///////////////////
-	// reset display //
+    // reset display //
     ///////////////////
-	nrf_gpio_pin_write(LCD_RESET,0);
-	nrf_delay_ms(200);
-	nrf_gpio_pin_write(LCD_RESET,1);
-	nrf_delay_ms(200);
-	nrf_gpio_pin_write(LCD_SELECT,0);
+    nrf_gpio_pin_write(LCD_RESET,0);
+    nrf_delay_ms(200);
+    nrf_gpio_pin_write(LCD_RESET,1);
+    nrf_delay_ms(200);
+    nrf_gpio_pin_write(LCD_SELECT,0);
 
 
     display_send (0, CMD_SWRESET);
     display_send (0, CMD_SLPOUT);
-    
+
     display_send (0, CMD_COLMOD);
     display_send (1, 0x55);
 
-	display_send (0, CMD_MADCTL); 
+    display_send (0, CMD_MADCTL); 
     display_send (1, 0x00);
 
-	display_send (0, CMD_INVON); // for standard 16 bit colors
-	display_send (0, CMD_NORON);
-	display_send (0, CMD_DISPON);
+    display_send (0, CMD_INVON); // for standard 16 bit colors
+    display_send (0, CMD_NORON);
+    display_send (0, CMD_DISPON);
 
 
     ///////////////////////////
-	// setup LCD_COMMAND PIN //
+    // setup LCD_COMMAND PIN //
     ///////////////////////////
     nrf_gpio_cfg_output(LCD_COMMAND);
 
@@ -145,9 +145,9 @@ void display_init() {
 
     // create GPIOTE task to switch LCD_COMMAND pin
     NRF_GPIOTE->CONFIG[1] = GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos |
-                            GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
-                            LCD_COMMAND << GPIOTE_CONFIG_PSEL_Pos | 
-                            GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
+        GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
+        LCD_COMMAND << GPIOTE_CONFIG_PSEL_Pos | 
+        GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
 
 
     // PPI channels for toggeling pin
@@ -159,15 +159,15 @@ void display_init() {
             NRF_PPI->CH[channel].TEP = (uint32_t) &NRF_GPIOTE->TASKS_CLR[1];
     }
 
-    
+
     NRF_PPI->CH[6].EEP = (uint32_t) &NRF_SPIM0->EVENTS_STARTED;
     NRF_PPI->CH[6].TEP = (uint32_t) &NRF_TIMER3->TASKS_CLEAR;
 
     NRF_PPI->CH[7].EEP = (uint32_t) &NRF_SPIM0->EVENTS_STARTED;
     NRF_PPI->CH[7].TEP = (uint32_t) &NRF_TIMER3->TASKS_START;
 
-  //  NRF_PPI->CH[8].EEP = (uint32_t) &NRF_TIMER3->EVENTS_COMPARE[5];
-  //  NRF_PPI->CH[8].TEP = (uint32_t) &NRF_TIMER3->TASKS_STOP;
+    //  NRF_PPI->CH[8].EEP = (uint32_t) &NRF_TIMER3->EVENTS_COMPARE[5];
+    //  NRF_PPI->CH[8].TEP = (uint32_t) &NRF_TIMER3->TASKS_STOP;
 
 
 }
@@ -182,7 +182,7 @@ void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t col
     // addresses are offset by 1 to give the ability to recycle the array
     /* setup display for writing */
     byteArray[1] = CMD_CASET;
- 
+
     byteArray[2] = x1 >> 8;
     byteArray[3] = x1 & 0xff;
 
@@ -190,7 +190,7 @@ void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t col
     byteArray[5] = x2 & 0xff;
 
     byteArray[6] = CMD_RASET;
- 
+
     byteArray[7] = y1 >> 8;
     byteArray[8] = y1 & 0xff;
 
@@ -249,7 +249,7 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 
     /* setup display for writing */
     byteArray[0] = CMD_CASET;
- 
+
     byteArray[1] = x1 >> 8;
     byteArray[2] = x1 & 0xff;
 
@@ -257,7 +257,7 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
     byteArray[4] = x2 & 0xff;
 
     byteArray[5] = CMD_RASET;
- 
+
     byteArray[6] = y1 >> 8;
     byteArray[7] = y1 & 0xff;
 
@@ -316,7 +316,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
     /* setup display for writing */
     byteArray0[0] = CMD_CASET;
- 
+
     byteArray0[1] = x1 >> 8;
     byteArray0[2] = x1 & 0xff;
 
@@ -324,7 +324,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
     byteArray0[4] = x2 & 0xff;
 
     byteArray0[5] = CMD_RASET;
- 
+
     byteArray0[6] = y1 >> 8;
     byteArray0[7] = y1 & 0xff;
 
@@ -349,7 +349,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
             byteArray = byteArray0;
         else 
             byteArray = byteArray1;
-        
+
 
         while (byte < maxLength - 1 && byte < bytesToSend) {
             uint16_t color = 0;
@@ -378,7 +378,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
         display_sendbuffer_noblock(byteArray, byte);
 
         bytesToSend -= byte;
-        
+
         byte = 0;
 
         packet++;
@@ -391,7 +391,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
     /* set square to draw in */
     display_send (0, CMD_VSCRDEF);
- 
+
     display_send (1,TFA >> 8);
     display_send (1,TFA & 0xff);
 
@@ -418,7 +418,7 @@ void partialMode(uint16_t PSL, uint16_t PEL) {
     display_send (1, 0x0/*0x10*/);
 
     display_send (0, CMD_PTLAR);
- 
+
     display_send (1,PSL >> 8);
     display_send (1,PSL & 0xff);
 
