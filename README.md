@@ -8,6 +8,9 @@ Because this display controller needs a pin to be high or low to signify if a co
 
 Currently the driver uses timer 3 and the first 8 PPI channels. I am planning to not hard code these in the future. This will probably mean that the way display_init() is called will change a bit at some point in the future.
 
+## NOTE
+The driver isn't quite done yet, and I am not the greatest programmer, so use with a bit of caution.
+
 ## Planned improvements
 * Make timer and PPI channels not hardcoded
 * Make it so that nrf_drv_spi.h from the nrf52 sdk isn't required anymore
