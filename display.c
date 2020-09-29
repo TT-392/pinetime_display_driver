@@ -307,6 +307,7 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 
 void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
+    //spi_xfer_done = true;
 
     int maxLength = 254; // TODO: this should be TXD.MAXCNT
     uint8_t byteArray0[maxLength];
@@ -367,14 +368,23 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
         }
 
 
-        display_sendbuffer(0, byteArray, byte);
+
+        if (packet > 0) {
+            while (!spi_xfer_done) {
+                __WFI();
+            }
+            ppi_clr();
+        }
+        display_sendbuffer_noblock(byteArray, byte);
 
         bytesToSend -= byte;
         
         byte = 0;
 
         packet++;
-        ppi_clr();
+    }
+    while (!spi_xfer_done) {
+        __WFI();
     }
 }
 
