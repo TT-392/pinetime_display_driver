@@ -26,6 +26,7 @@ void spi_event_handler(nrf_drv_spi_evt_t const *p_event, void *p_context) {
     spi_xfer_done = true;
 }
 
+
 // send one byte over spi
 void display_send(bool mode, uint8_t byte) {
     nrf_gpio_pin_write(LCD_COMMAND,mode);
