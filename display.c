@@ -1,5 +1,6 @@
 #include "nrf.h"
-#include "nrf_drv_spi.h"
+///#include "nrf_drv_spi.h"
+#include "nrfx_spim.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
 #include "display_defines.h"
@@ -7,7 +8,7 @@
 
 
 #define SPI_INSTANCE  0 /**< SPI instance index. */
-static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(0);  /**< SPI instance. */
+static const nrfx_spim_t spi = NRFX_SPIM_INSTANCE(0);  /**< SPI instance. */
 static volatile bool spi_xfer_done;  /**< Flag used to indicate that SPI instance completed the transfer. */
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
@@ -22,7 +23,7 @@ void display_backlight(char brightness) {
 
 
 // handler that will be called when bytes are sent
-void spi_event_handler(nrf_drv_spi_evt_t const *p_event, void *p_context) {
+void spim_event_handler(nrfx_spim_evt_t const * p_event, void * p_context) {
     spi_xfer_done = true;
 }
 
@@ -36,7 +37,14 @@ void display_send(bool mode, uint8_t byte) {
 
     uint8_t m_length = sizeof(m_tx_buf); 
 
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    nrfx_spim_xfer_desc_t xfer = {
+        .p_tx_buffer = m_tx_buf,
+        .tx_length = m_length,
+        .p_rx_buffer = NULL,
+        .rx_length= 0,
+    };
+
+    nrfx_spim_xfer(&spi, &xfer, 0);
 
 
     while (!spi_xfer_done) {
@@ -48,7 +56,15 @@ void display_send(bool mode, uint8_t byte) {
 void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
     spi_xfer_done = false;
 
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    nrfx_spim_xfer_desc_t xfer = {
+        .p_tx_buffer = m_tx_buf,
+        .tx_length = m_length,
+        .p_rx_buffer = NULL,
+        .rx_length= 0,
+    };
+
+    nrfx_spim_xfer(&spi, &xfer, 0);
 
     while (!spi_xfer_done) {
         __WFE();
@@ -59,7 +75,15 @@ void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
 void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
     spi_xfer_done = false;
 
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    nrfx_spim_xfer_desc_t xfer = {
+        .p_tx_buffer = m_tx_buf,
+        .tx_length = m_length,
+        .p_rx_buffer = NULL,
+        .rx_length= 0,
+    };
+
+    nrfx_spim_xfer(&spi, &xfer, 0);
 
 }
 
@@ -86,17 +110,27 @@ void display_init() {
     ///////////////
     // spi setup //
     ///////////////
-    nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
-    spi_config.ss_pin= NRF_DRV_SPI_PIN_NOT_USED;
-    spi_config.miso_pin = LCD_MISO;
-    spi_config.mosi_pin = LCD_MOSI;
-    spi_config.sck_pin  = LCD_SCK;
-    spi_config.irq_priority  = APP_IRQ_PRIORITY_LOW;
-    spi_config.frequency  = NRF_DRV_SPI_FREQ_8M;
-    spi_config.bit_order = NRF_DRV_SPI_BIT_ORDER_MSB_FIRST;
-    spi_config.mode=NRF_DRV_SPI_MODE_3; // Trailing edge clock, active low
+    //nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
+    //spi_config.ss_pin= NRF_DRV_SPI_PIN_NOT_USED;
+    //spi_config.miso_pin = LCD_MISO;
+    //spi_config.mosi_pin = LCD_MOSI;
+    //spi_config.sck_pin  = LCD_SCK;
+    //spi_config.irq_priority  = APP_IRQ_PRIORITY_LOW;
+    //spi_config.frequency  = NRF_DRV_SPI_FREQ_8M;
+    //spi_config.bit_order = NRF_DRV_SPI_BIT_ORDER_MSB_FIRST;
+    //spi_config.mode=NRF_DRV_SPI_MODE_3; // Trailing edge clock, active low
 
-    nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL);
+    //nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL);
+
+
+    nrfx_spim_config_t spi_config = NRFX_SPIM_DEFAULT_CONFIG;
+    spi_config.frequency      = NRF_SPIM_FREQ_8M;
+    spi_config.ss_pin         = NRFX_SPIM_PIN_NOT_USED;
+    spi_config.miso_pin       = LCD_MISO;
+    spi_config.mosi_pin       = LCD_MOSI;
+    spi_config.sck_pin        = LCD_SCK;
+    spi_config.mode           = NRF_SPIM_MODE_3;
+    nrfx_spim_init(&spi, &spi_config, spim_event_handler, NULL);
 
 
     ///////////////////
