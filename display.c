@@ -1,13 +1,9 @@
 #include "nrf.h"
-#include "nrfx_spim.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
 #include "display_defines.h"
 #include "display.h"
 
-
-static const nrfx_spim_t spi = {NRF_SPIM0, NRFX_SPIM0_INST_IDX};  /**< SPI instance. */
-static volatile bool spi_xfer_done;  /**< Flag used to indicate that SPI instance completed the transfer. */
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
@@ -19,85 +15,29 @@ void display_backlight(char brightness) {
     }
 }
 
-
-// handler that will be called when bytes are sent
-void spim_event_handler(nrfx_spim_evt_t const * p_event, void * p_context) {
-    spi_xfer_done = true;
-}
-
 // send one byte over spi
 void display_send(bool mode, uint8_t byte) {
     nrf_gpio_pin_write(LCD_COMMAND,mode);
-   // spi_xfer_done = false;
-
-   // uint8_t m_tx_buf[1];         
-   // m_tx_buf[0] = byte;
-
-   // uint8_t m_length = sizeof(m_tx_buf); 
-
-   // nrfx_spim_xfer_desc_t xfer = {
-   //     .p_tx_buffer = m_tx_buf,
-   //     .tx_length = m_length,
-   //     .p_rx_buffer = NULL,
-   //     .rx_length= 0,
-   // };
-
-   // nrfx_spim_xfer(&spi, &xfer, 0);
 
 
-   // while (!spi_xfer_done) {
-   //     __WFE();
-   // }
-    // Create an event when SCK toggles.
-    NRF_GPIOTE->CONFIG[0] =
-        (GPIOTE_CONFIG_MODE_Event << GPIOTE_CONFIG_MODE_Pos) |
-        (NRF_SPIM0->PSEL.SCK << GPIOTE_CONFIG_PSEL_Pos) |
-        (GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos);
-
-    // Stop the spim instance when SCK toggles.
-    NRF_PPI->CH[0].EEP = (uint32_t)&NRF_GPIOTE->EVENTS_IN[0];
-    NRF_PPI->CH[0].TEP = (uint32_t)&NRF_SPIM0->TASKS_STOP;
-    NRF_PPI->CHENSET = 1U << 0;
-    NRF_SPIM0->EVENTS_END = 0;
-
-    uint8_t m_tx_buf[1] = {byte};
-
-   // NRF_SPIM0->TXD.MAXCNT = 1;
-   // NRF_SPIM0->TXD.PTR = (uint32_t)&byte;
     NRF_SPIM0->TXD.MAXCNT = 1;
-    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
+    NRF_SPIM0->TXD.PTR = (uint32_t)&byte;
 
     NRF_SPIM0->EVENTS_ENDTX = 0;
     NRF_SPIM0->EVENTS_ENDRX = 0;
     NRF_SPIM0->EVENTS_END = 0;
 
     NRF_SPIM0->TASKS_START = 1;
-    while(NRF_SPIM0->EVENTS_ENDTX == 0);
-    while(NRF_SPIM0->EVENTS_END == 0);
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) {__NOP();};
+    while(NRF_SPIM0->EVENTS_END == 0){__NOP();};
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0);
-    
+    while (NRF_SPIM0->EVENTS_STOPPED == 0){__NOP();};
 }
 
 // send a bunch of bytes from buffer
 void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
-   // spi_xfer_done = false;
-
-   // //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
-   // nrfx_spim_xfer_desc_t xfer = {
-   //     .p_tx_buffer = m_tx_buf,
-   //     .tx_length = m_length,
-   //     .p_rx_buffer = NULL,
-   //     .rx_length= 0,
-   // };
-
-   // nrfx_spim_xfer(&spi, &xfer, 0);
-
-   // while (!spi_xfer_done) {
-   //     __WFE();
-   // }
     NRF_SPIM0->TXD.MAXCNT = m_length;
-    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
+    NRF_SPIM0->TXD.PTR = (uint32_t)m_tx_buf;
 
     NRF_SPIM0->EVENTS_ENDTX = 0;
     NRF_SPIM0->EVENTS_ENDRX = 0;
@@ -112,18 +52,6 @@ void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
 
 // send a bunch of bytes from buffer
 void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
-    spi_xfer_done = false;
-
-   // //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
-   // nrfx_spim_xfer_desc_t xfer = {
-   //     .p_tx_buffer = m_tx_buf,
-   //     .tx_length = m_length,
-   //     .p_rx_buffer = NULL,
-   //     .rx_length= 0,
-   // };
-
-   // nrfx_spim_xfer(&spi, &xfer, 0);
-   //
     NRF_SPIM0->TXD.MAXCNT = m_length;
     NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
 
@@ -132,14 +60,16 @@ void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
     NRF_SPIM0->EVENTS_END = 0;
 
     NRF_SPIM0->TASKS_START = 1;
+}
+
+// this function must be called after display_sendbuffer_noblock has been called
+// and before the next call of spim related functions. It will wait for spim to
+// finish and will then stop spim0
+void display_sendbuffer_finish() {
     while(NRF_SPIM0->EVENTS_ENDTX == 0);
     while(NRF_SPIM0->EVENTS_END == 0);
     NRF_SPIM0->TASKS_STOP = 1;
     while (NRF_SPIM0->EVENTS_STOPPED == 0);
-
-
-
-
 }
 
 #define ppi_set() NRF_PPI->CHENSET = 0xff; // enable first 8 ppi channels
@@ -184,8 +114,8 @@ void display_init() {
               (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
 
     NRF_SPIM0->CONFIG = config;
-    NRF_SPIM0->FREQUENCY = NRF_SPIM_FREQ_8M << SPIM_FREQUENCY_FREQUENCY_Pos;
-    NRF_SPIM0-> ENABLE = SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos;
+    NRF_SPIM0->FREQUENCY = SPIM_FREQUENCY_FREQUENCY_M8 << SPIM_FREQUENCY_FREQUENCY_Pos;
+    NRF_SPIM0->ENABLE = SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos;
 
 
 
@@ -212,6 +142,7 @@ void display_init() {
     display_send (0, CMD_INVON); // for standard 16 bit colors
     display_send (0, CMD_NORON);
     display_send (0, CMD_DISPON);
+
 
 
     ///////////////////////////
@@ -398,7 +329,6 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 
 void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
-    //spi_xfer_done = true;
 
     int maxLength = 254; // TODO: this should be TXD.MAXCNT
     uint8_t byteArray0[maxLength];
@@ -461,9 +391,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
 
         if (packet > 0) {
-          //  while (!spi_xfer_done) {
-          //      __WFI();
-          //  }
+            display_sendbuffer_finish();
             ppi_clr();
         }
         display_sendbuffer_noblock(byteArray, byte);
@@ -474,9 +402,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
         packet++;
     }
-  //  while (!spi_xfer_done) {
-  //      __WFI();
-  //  }
+    display_sendbuffer_finish();
 }
 
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
