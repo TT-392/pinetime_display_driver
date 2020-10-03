@@ -10,7 +10,6 @@ Currently the driver uses timer 3 and the first 8 PPI channels. I am planning to
 
 ## Dependencies
 The nordic sdk from which it uses
-* nrf_drv_spi.h
 * nrf_gpio.h
 * nrf_delay.h
 * nrf.h
