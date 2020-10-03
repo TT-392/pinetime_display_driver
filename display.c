@@ -48,7 +48,20 @@ void display_send(bool mode, uint8_t byte) {
    // while (!spi_xfer_done) {
    //     __WFE();
    // }
+    // Create an event when SCK toggles.
+    NRF_GPIOTE->CONFIG[0] =
+        (GPIOTE_CONFIG_MODE_Event << GPIOTE_CONFIG_MODE_Pos) |
+        (NRF_SPIM0->PSEL.SCK << GPIOTE_CONFIG_PSEL_Pos) |
+        (GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos);
+
+    // Stop the spim instance when SCK toggles.
+    NRF_PPI->CH[0].EEP = (uint32_t)&NRF_GPIOTE->EVENTS_IN[0];
+    NRF_PPI->CH[0].TEP = (uint32_t)&NRF_SPIM0->TASKS_STOP;
+    NRF_PPI->CHENSET = 1U << 0;
+    NRF_SPIM0->EVENTS_END = 0;
+
     uint8_t m_tx_buf[1] = {byte};
+
    // NRF_SPIM0->TXD.MAXCNT = 1;
    // NRF_SPIM0->TXD.PTR = (uint32_t)&byte;
     NRF_SPIM0->TXD.MAXCNT = 1;
@@ -63,6 +76,7 @@ void display_send(bool mode, uint8_t byte) {
     while(NRF_SPIM0->EVENTS_END == 0);
     NRF_SPIM0->TASKS_STOP = 1;
     while (NRF_SPIM0->EVENTS_STOPPED == 0);
+    
 }
 
 // send a bunch of bytes from buffer
