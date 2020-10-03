@@ -1,5 +1,4 @@
 #include "nrf.h"
-///#include "nrf_drv_spi.h"
 #include "nrfx_spim.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
@@ -7,8 +6,7 @@
 #include "display.h"
 
 
-#define SPI_INSTANCE  0 /**< SPI instance index. */
-static const nrfx_spim_t spi = NRFX_SPIM_INSTANCE(0);  /**< SPI instance. */
+static const nrfx_spim_t spi = {NRF_SPIM0, NRFX_SPIM0_INST_IDX};  /**< SPI instance. */
 static volatile bool spi_xfer_done;  /**< Flag used to indicate that SPI instance completed the transfer. */
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
@@ -30,60 +28,103 @@ void spim_event_handler(nrfx_spim_evt_t const * p_event, void * p_context) {
 // send one byte over spi
 void display_send(bool mode, uint8_t byte) {
     nrf_gpio_pin_write(LCD_COMMAND,mode);
-    spi_xfer_done = false;
+   // spi_xfer_done = false;
 
-    uint8_t m_tx_buf[1];         
-    m_tx_buf[0] = byte;
+   // uint8_t m_tx_buf[1];         
+   // m_tx_buf[0] = byte;
 
-    uint8_t m_length = sizeof(m_tx_buf); 
+   // uint8_t m_length = sizeof(m_tx_buf); 
 
-    nrfx_spim_xfer_desc_t xfer = {
-        .p_tx_buffer = m_tx_buf,
-        .tx_length = m_length,
-        .p_rx_buffer = NULL,
-        .rx_length= 0,
-    };
+   // nrfx_spim_xfer_desc_t xfer = {
+   //     .p_tx_buffer = m_tx_buf,
+   //     .tx_length = m_length,
+   //     .p_rx_buffer = NULL,
+   //     .rx_length= 0,
+   // };
 
-    nrfx_spim_xfer(&spi, &xfer, 0);
+   // nrfx_spim_xfer(&spi, &xfer, 0);
 
 
-    while (!spi_xfer_done) {
-        __WFE();
-    }
+   // while (!spi_xfer_done) {
+   //     __WFE();
+   // }
+    uint8_t m_tx_buf[1] = {byte};
+   // NRF_SPIM0->TXD.MAXCNT = 1;
+   // NRF_SPIM0->TXD.PTR = (uint32_t)&byte;
+    NRF_SPIM0->TXD.MAXCNT = 1;
+    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
+
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
+
+    NRF_SPIM0->TASKS_START = 1;
+    while(NRF_SPIM0->EVENTS_ENDTX == 0);
+    while(NRF_SPIM0->EVENTS_END == 0);
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0);
 }
 
 // send a bunch of bytes from buffer
 void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
-    spi_xfer_done = false;
+   // spi_xfer_done = false;
 
-    //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
-    nrfx_spim_xfer_desc_t xfer = {
-        .p_tx_buffer = m_tx_buf,
-        .tx_length = m_length,
-        .p_rx_buffer = NULL,
-        .rx_length= 0,
-    };
+   // //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+   // nrfx_spim_xfer_desc_t xfer = {
+   //     .p_tx_buffer = m_tx_buf,
+   //     .tx_length = m_length,
+   //     .p_rx_buffer = NULL,
+   //     .rx_length= 0,
+   // };
 
-    nrfx_spim_xfer(&spi, &xfer, 0);
+   // nrfx_spim_xfer(&spi, &xfer, 0);
 
-    while (!spi_xfer_done) {
-        __WFE();
-    }
+   // while (!spi_xfer_done) {
+   //     __WFE();
+   // }
+    NRF_SPIM0->TXD.MAXCNT = m_length;
+    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
+
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
+
+    NRF_SPIM0->TASKS_START = 1;
+    while(NRF_SPIM0->EVENTS_ENDTX == 0);
+    while(NRF_SPIM0->EVENTS_END == 0);
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0);
 }
 
 // send a bunch of bytes from buffer
 void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
     spi_xfer_done = false;
 
-    //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
-    nrfx_spim_xfer_desc_t xfer = {
-        .p_tx_buffer = m_tx_buf,
-        .tx_length = m_length,
-        .p_rx_buffer = NULL,
-        .rx_length= 0,
-    };
+   // //nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+   // nrfx_spim_xfer_desc_t xfer = {
+   //     .p_tx_buffer = m_tx_buf,
+   //     .tx_length = m_length,
+   //     .p_rx_buffer = NULL,
+   //     .rx_length= 0,
+   // };
 
-    nrfx_spim_xfer(&spi, &xfer, 0);
+   // nrfx_spim_xfer(&spi, &xfer, 0);
+   //
+    NRF_SPIM0->TXD.MAXCNT = m_length;
+    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
+
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
+
+    NRF_SPIM0->TASKS_START = 1;
+    while(NRF_SPIM0->EVENTS_ENDTX == 0);
+    while(NRF_SPIM0->EVENTS_END == 0);
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0);
+
+
+
 
 }
 
@@ -110,27 +151,29 @@ void display_init() {
     ///////////////
     // spi setup //
     ///////////////
-    //nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
-    //spi_config.ss_pin= NRF_DRV_SPI_PIN_NOT_USED;
-    //spi_config.miso_pin = LCD_MISO;
-    //spi_config.mosi_pin = LCD_MOSI;
-    //spi_config.sck_pin  = LCD_SCK;
-    //spi_config.irq_priority  = APP_IRQ_PRIORITY_LOW;
-    //spi_config.frequency  = NRF_DRV_SPI_FREQ_8M;
-    //spi_config.bit_order = NRF_DRV_SPI_BIT_ORDER_MSB_FIRST;
-    //spi_config.mode=NRF_DRV_SPI_MODE_3; // Trailing edge clock, active low
 
-    //nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL);
+   // nrfx_spim_config_t spi_config = NRFX_SPIM_DEFAULT_CONFIG;
+   // spi_config.frequency      = NRF_SPIM_FREQ_8M;
+   // spi_config.ss_pin         = NRFX_SPIM_PIN_NOT_USED;
+   // spi_config.miso_pin       = LCD_MISO;
+   // spi_config.mosi_pin       = LCD_MOSI;
+   // spi_config.sck_pin        = LCD_SCK;
+   // spi_config.mode           = NRF_SPIM_MODE_3;
+   // nrfx_spim_init(&spi, &spi_config, spim_event_handler, NULL);
+    NRF_SPIM0->PSEL.SCK  = LCD_SCK;
+    NRF_SPIM0->PSEL.MOSI = LCD_MOSI;
+    NRF_SPIM0->PSEL.MISO = LCD_MISO;
+
+    uint32_t config = (SPIM_CONFIG_ORDER_MsbFirst);
+
+    config |= (SPIM_CONFIG_CPOL_ActiveLow  << SPIM_CONFIG_CPOL_Pos) |
+              (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
+
+    NRF_SPIM0->CONFIG = config;
+    NRF_SPIM0->FREQUENCY = NRF_SPIM_FREQ_8M << SPIM_FREQUENCY_FREQUENCY_Pos;
+    NRF_SPIM0-> ENABLE = SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos;
 
 
-    nrfx_spim_config_t spi_config = NRFX_SPIM_DEFAULT_CONFIG;
-    spi_config.frequency      = NRF_SPIM_FREQ_8M;
-    spi_config.ss_pin         = NRFX_SPIM_PIN_NOT_USED;
-    spi_config.miso_pin       = LCD_MISO;
-    spi_config.mosi_pin       = LCD_MOSI;
-    spi_config.sck_pin        = LCD_SCK;
-    spi_config.mode           = NRF_SPIM_MODE_3;
-    nrfx_spim_init(&spi, &spi_config, spim_event_handler, NULL);
 
 
     ///////////////////
@@ -404,9 +447,9 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
 
         if (packet > 0) {
-            while (!spi_xfer_done) {
-                __WFI();
-            }
+          //  while (!spi_xfer_done) {
+          //      __WFI();
+          //  }
             ppi_clr();
         }
         display_sendbuffer_noblock(byteArray, byte);
@@ -417,9 +460,9 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
         packet++;
     }
-    while (!spi_xfer_done) {
-        __WFI();
-    }
+  //  while (!spi_xfer_done) {
+  //      __WFI();
+  //  }
 }
 
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
