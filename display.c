@@ -96,14 +96,6 @@ void display_init() {
     // spi setup //
     ///////////////
 
-   // nrfx_spim_config_t spi_config = NRFX_SPIM_DEFAULT_CONFIG;
-   // spi_config.frequency      = NRF_SPIM_FREQ_8M;
-   // spi_config.ss_pin         = NRFX_SPIM_PIN_NOT_USED;
-   // spi_config.miso_pin       = LCD_MISO;
-   // spi_config.mosi_pin       = LCD_MOSI;
-   // spi_config.sck_pin        = LCD_SCK;
-   // spi_config.mode           = NRF_SPIM_MODE_3;
-   // nrfx_spim_init(&spi, &spi_config, spim_event_handler, NULL);
     NRF_SPIM0->PSEL.SCK  = LCD_SCK;
     NRF_SPIM0->PSEL.MOSI = LCD_MOSI;
     NRF_SPIM0->PSEL.MISO = LCD_MISO;
@@ -111,7 +103,7 @@ void display_init() {
     uint32_t config = (SPIM_CONFIG_ORDER_MsbFirst);
 
     config |= (SPIM_CONFIG_CPOL_ActiveLow  << SPIM_CONFIG_CPOL_Pos) |
-              (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
+        (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
 
     NRF_SPIM0->CONFIG = config;
     NRF_SPIM0->FREQUENCY = SPIM_FREQUENCY_FREQUENCY_M8 << SPIM_FREQUENCY_FREQUENCY_Pos;
