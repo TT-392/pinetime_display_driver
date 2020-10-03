@@ -3,6 +3,7 @@
 #include "nrf_delay.h"
 #include "display_defines.h"
 #include "display.h"
+#include "nrf_assert.h"
 
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
@@ -28,10 +29,10 @@ void display_send(bool mode, uint8_t byte) {
     NRF_SPIM0->EVENTS_END = 0;
 
     NRF_SPIM0->TASKS_START = 1;
-    while(NRF_SPIM0->EVENTS_ENDTX == 0) {__NOP();};
-    while(NRF_SPIM0->EVENTS_END == 0){__NOP();};
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) __NOP();
+    while(NRF_SPIM0->EVENTS_END == 0) __NOP();
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0){__NOP();};
+    while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
 }
 
 // send a bunch of bytes from buffer
@@ -44,10 +45,10 @@ void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
     NRF_SPIM0->EVENTS_END = 0;
 
     NRF_SPIM0->TASKS_START = 1;
-    while(NRF_SPIM0->EVENTS_ENDTX == 0);
-    while(NRF_SPIM0->EVENTS_END == 0);
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) __NOP();
+    while(NRF_SPIM0->EVENTS_END == 0) __NOP();
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0);
+    while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
 }
 
 // send a bunch of bytes from buffer
@@ -66,10 +67,10 @@ void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
 // and before the next call of spim related functions. It will wait for spim to
 // finish and will then stop spim0
 void display_sendbuffer_finish() {
-    while(NRF_SPIM0->EVENTS_ENDTX == 0);
-    while(NRF_SPIM0->EVENTS_END == 0);
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) __NOP();
+    while(NRF_SPIM0->EVENTS_END == 0) __NOP();
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0);
+    while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
 }
 
 #define ppi_set() NRF_PPI->CHENSET = 0xff; // enable first 8 ppi channels
