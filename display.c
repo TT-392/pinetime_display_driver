@@ -1,14 +1,9 @@
 #include "nrf.h"
-#include "nrf_drv_spi.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
 #include "display_defines.h"
 #include "display.h"
 
-
-#define SPI_INSTANCE  0 /**< SPI instance index. */
-static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(0);  /**< SPI instance. */
-static volatile bool spi_xfer_done;  /**< Flag used to indicate that SPI instance completed the transfer. */
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
@@ -20,48 +15,61 @@ void display_backlight(char brightness) {
     }
 }
 
-
-// handler that will be called when bytes are sent
-void spi_event_handler(nrf_drv_spi_evt_t const *p_event, void *p_context) {
-    spi_xfer_done = true;
-}
-
-
 // send one byte over spi
 void display_send(bool mode, uint8_t byte) {
     nrf_gpio_pin_write(LCD_COMMAND,mode);
-    spi_xfer_done = false;
-
-    uint8_t m_tx_buf[1];         
-    m_tx_buf[0] = byte;
-
-    uint8_t m_length = sizeof(m_tx_buf); 
-
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
 
 
-    while (!spi_xfer_done) {
-        __WFE();
-    }
+    NRF_SPIM0->TXD.MAXCNT = 1;
+    NRF_SPIM0->TXD.PTR = (uint32_t)&byte;
+
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
+
+    NRF_SPIM0->TASKS_START = 1;
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) {__NOP();};
+    while(NRF_SPIM0->EVENTS_END == 0){__NOP();};
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0){__NOP();};
 }
 
 // send a bunch of bytes from buffer
 void display_sendbuffer(bool mode, uint8_t* m_tx_buf, int m_length) {
-    spi_xfer_done = false;
+    NRF_SPIM0->TXD.MAXCNT = m_length;
+    NRF_SPIM0->TXD.PTR = (uint32_t)m_tx_buf;
 
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
 
-    while (!spi_xfer_done) {
-        __WFE();
-    }
+    NRF_SPIM0->TASKS_START = 1;
+    while(NRF_SPIM0->EVENTS_ENDTX == 0);
+    while(NRF_SPIM0->EVENTS_END == 0);
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0);
 }
 
 // send a bunch of bytes from buffer
 void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
-    spi_xfer_done = false;
+    NRF_SPIM0->TXD.MAXCNT = m_length;
+    NRF_SPIM0->TXD.PTR = (uint32_t)&m_tx_buf[0];
 
-    nrf_drv_spi_transfer(&spi, m_tx_buf, m_length, NULL, 0);
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_END = 0;
 
+    NRF_SPIM0->TASKS_START = 1;
+}
+
+// this function must be called after display_sendbuffer_noblock has been called
+// and before the next call of spim related functions. It will wait for spim to
+// finish and will then stop spim0
+void display_sendbuffer_finish() {
+    while(NRF_SPIM0->EVENTS_ENDTX == 0);
+    while(NRF_SPIM0->EVENTS_END == 0);
+    NRF_SPIM0->TASKS_STOP = 1;
+    while (NRF_SPIM0->EVENTS_STOPPED == 0);
 }
 
 #define ppi_set() NRF_PPI->CHENSET = 0xff; // enable first 8 ppi channels
@@ -87,17 +95,29 @@ void display_init() {
     ///////////////
     // spi setup //
     ///////////////
-    nrf_drv_spi_config_t spi_config = NRF_DRV_SPI_DEFAULT_CONFIG;
-    spi_config.ss_pin= NRF_DRV_SPI_PIN_NOT_USED;
-    spi_config.miso_pin = LCD_MISO;
-    spi_config.mosi_pin = LCD_MOSI;
-    spi_config.sck_pin  = LCD_SCK;
-    spi_config.irq_priority  = APP_IRQ_PRIORITY_LOW;
-    spi_config.frequency  = NRF_DRV_SPI_FREQ_8M;
-    spi_config.bit_order = NRF_DRV_SPI_BIT_ORDER_MSB_FIRST;
-    spi_config.mode=NRF_DRV_SPI_MODE_3; // Trailing edge clock, active low
 
-    nrf_drv_spi_init(&spi, &spi_config, spi_event_handler, NULL);
+   // nrfx_spim_config_t spi_config = NRFX_SPIM_DEFAULT_CONFIG;
+   // spi_config.frequency      = NRF_SPIM_FREQ_8M;
+   // spi_config.ss_pin         = NRFX_SPIM_PIN_NOT_USED;
+   // spi_config.miso_pin       = LCD_MISO;
+   // spi_config.mosi_pin       = LCD_MOSI;
+   // spi_config.sck_pin        = LCD_SCK;
+   // spi_config.mode           = NRF_SPIM_MODE_3;
+   // nrfx_spim_init(&spi, &spi_config, spim_event_handler, NULL);
+    NRF_SPIM0->PSEL.SCK  = LCD_SCK;
+    NRF_SPIM0->PSEL.MOSI = LCD_MOSI;
+    NRF_SPIM0->PSEL.MISO = LCD_MISO;
+
+    uint32_t config = (SPIM_CONFIG_ORDER_MsbFirst);
+
+    config |= (SPIM_CONFIG_CPOL_ActiveLow  << SPIM_CONFIG_CPOL_Pos) |
+              (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
+
+    NRF_SPIM0->CONFIG = config;
+    NRF_SPIM0->FREQUENCY = SPIM_FREQUENCY_FREQUENCY_M8 << SPIM_FREQUENCY_FREQUENCY_Pos;
+    NRF_SPIM0->ENABLE = SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos;
+
+
 
 
     ///////////////////
@@ -122,6 +142,7 @@ void display_init() {
     display_send (0, CMD_INVON); // for standard 16 bit colors
     display_send (0, CMD_NORON);
     display_send (0, CMD_DISPON);
+
 
 
     ///////////////////////////
@@ -308,7 +329,6 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 
 void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
-    //spi_xfer_done = true;
 
     int maxLength = 254; // TODO: this should be TXD.MAXCNT
     uint8_t byteArray0[maxLength];
@@ -371,9 +391,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
 
         if (packet > 0) {
-            while (!spi_xfer_done) {
-                __WFI();
-            }
+            display_sendbuffer_finish();
             ppi_clr();
         }
         display_sendbuffer_noblock(byteArray, byte);
@@ -384,9 +402,7 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 
         packet++;
     }
-    while (!spi_xfer_done) {
-        __WFI();
-    }
+    display_sendbuffer_finish();
 }
 
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
