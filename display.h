@@ -19,7 +19,7 @@ void display_backlight(char brightness);
 /*
  * Function to draw a 1 bit bitdepth bitmap
  */
-void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t *frame, uint16_t posColor, uint16_t negColor);
+void drawMono(int x1, int y1, int x2, int y2, uint8_t *frame, uint16_t posColor, uint16_t negColor);
 
 /*
  * Function to draw a bitmap to the display

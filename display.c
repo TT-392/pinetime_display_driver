@@ -150,12 +150,12 @@ void display_init() {
 
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(0*2);
-    NRF_TIMER3->CC[1] = 5+(8*2);
-    NRF_TIMER3->CC[2] = 5+(40*2);
-    NRF_TIMER3->CC[3] = 5+(48*2);
-    NRF_TIMER3->CC[4] = 5+(80*2);
-    NRF_TIMER3->CC[5] = 5+(88*2);
+    NRF_TIMER3->CC[0] = 5+(8*0*2);
+    NRF_TIMER3->CC[1] = 5+(8*1*2);
+    NRF_TIMER3->CC[2] = 5+(8*5*2);
+    NRF_TIMER3->CC[3] = 5+(8*6*2);
+    NRF_TIMER3->CC[4] = 5+(8*10*2);
+    NRF_TIMER3->CC[5] = 5+(8*11*2);
 
 
     // create GPIOTE task to switch LCD_COMMAND pin
@@ -320,7 +320,7 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 }
 
 
-void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
+void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
 
     int maxLength = 254; // TODO: this should be TXD.MAXCNT
@@ -399,28 +399,49 @@ void drawMono(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* frame, ui
 }
 
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
+    // the following CC setup will cause byte 0, 5 and 10 
+    // of any SPIM0 dma transfer to be treated as CMD bytes
+    NRF_TIMER3->CC[0] = 5+(8*0*2); // low
+    NRF_TIMER3->CC[1] = 5+(8*1*2); // high
+    NRF_TIMER3->CC[2] = 5+(8*7*2); // low
+    NRF_TIMER3->CC[3] = 5+(8*8*2); // high
+    NRF_TIMER3->CC[4] = 5+(8*9*2); // low
+    NRF_TIMER3->CC[5] = 5+(8*10*2); // high
+    ppi_set();
+
+    uint8_t byteArray[12];
     /* set square to draw in */
-    display_send (0, CMD_VSCRDEF);
+    byteArray[0] = CMD_VSCRDEF;
 
-    display_send (1,TFA >> 8);
-    display_send (1,TFA & 0xff);
+    byteArray[1] = TFA >> 8;
+    byteArray[2] = TFA & 0xff;
 
-    display_send (1,VSA >> 8);
-    display_send (1,VSA & 0xff);
+    byteArray[3] = VSA >> 8;
+    byteArray[4] = VSA & 0xff;
 
-    display_send (1,BFA >> 8);
-    display_send (1,BFA & 0xff);
+    byteArray[5] = BFA >> 8;
+    byteArray[6] = BFA & 0xff;
 
-    display_send (0, CMD_MADCTL);
-    display_send (1, 0x0/*0x10*/);
+    byteArray[7] = CMD_MADCTL;
+    byteArray[8] = 0x0;
 
+    byteArray[9] = CMD_VSCSAD;
 
-    display_send (0,CMD_VSCSAD);
+    byteArray[10] = scroll_value >> 8;
+    byteArray[11] = scroll_value & 0xff;
 
-    display_send (1,scroll_value >> 8);
-    display_send (1,scroll_value & 0xff);
+    display_sendbuffer(0, byteArray, 12);
 
     /**/
+
+    // the following CC setup will cause byte 0, 5 and 10 
+    // of any SPIM0 dma transfer to be treated as CMD bytes
+    NRF_TIMER3->CC[0] = 5+(8*0*2);
+    NRF_TIMER3->CC[1] = 5+(8*1*2);
+    NRF_TIMER3->CC[2] = 5+(8*5*2);
+    NRF_TIMER3->CC[3] = 5+(8*6*2);
+    NRF_TIMER3->CC[4] = 5+(8*10*2);
+    NRF_TIMER3->CC[5] = 5+(8*11*2);
 }
 
 void partialMode(uint16_t PSL, uint16_t PEL) {
