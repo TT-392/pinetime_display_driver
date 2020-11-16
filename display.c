@@ -73,8 +73,9 @@ void display_sendbuffer_finish() {
     while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
 }
 
-#define ppi_set() NRF_PPI->CHENSET = 0xff; // enable first 8 ppi channels
-#define ppi_clr() NRF_PPI->CHENCLR = 0xff; // disable first 8 ppi channels
+#define ppi_set() NRF_PPI->CHENSET = 0xff; __disable_irq();// enable first 8 ppi channels
+#define ppi_clr() NRF_PPI->CHENCLR = 0xff; __enable_irq(); // disable first 8 ppi channels
+
 
 void display_init() {
     ////////////////
