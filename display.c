@@ -192,7 +192,7 @@ void display_init() {
 void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color) {
     ppi_set();
 
-    int maxLength = 254; // TODO: this should be TXD.MAXCNT
+    int maxLength = 254; 
     uint8_t byteArray [maxLength + 1];
 
     // addresses are offset by 1 to give the ability to recycle the array
@@ -257,10 +257,10 @@ void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t col
 }
 
 
-void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap) {
+void drawBitmap (uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t* bitmap) {
     ppi_set();
 
-    int maxLength = 254; // TODO: this should be TXD.MAXCNT
+    int maxLength = 254; 
     uint8_t byteArray[maxLength];
 
     /* setup display for writing */
@@ -324,7 +324,7 @@ void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap
 void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
 
-    int maxLength = 254; // TODO: this should be TXD.MAXCNT
+    int maxLength = 254;
     uint8_t byteArray0[maxLength];
     uint8_t byteArray1[maxLength];
 
@@ -353,50 +353,56 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     int area = (x2-x1+1)*(y2-y1+1);
 
 
-    int pixel = 0;
     int byte = 11;
     int bytesToSend = byte + area*2;
     int packet = 0;
 
-    while (area > pixel) {
-        uint8_t* byteArray;
+    uint8_t* byteArray;
+
+    for (int pixel = 0; pixel < area; pixel++) {
+        // use 2 arrays so that dma can keep sending while more data is being processed.
         if (packet % 2 == 0) 
             byteArray = byteArray0;
         else 
             byteArray = byteArray1;
 
-
-        while (byte < maxLength - 1 && byte < bytesToSend) {
-            uint16_t color = 0;
-
-            if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
-                color = posColor;
-            } else {
-                color = negColor;
-            }
-            byteArray[byte] = color >> 8;
-            byte++;
-            byteArray[byte] = color;
-            byte++;
-
-            pixel++;
+        // write a pixel from the mono bitmap to the color bitmap(byteArray)
+        uint16_t color = 0;
+        if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
+            color = posColor;
+        } else {
+            color = negColor;
         }
+        byteArray[byte] = color >> 8;
+        byte++;
+        byteArray[byte] = color;
+        byte++;
+        
+        // if first array is full
+        if (byte >= maxLength - 1) {
+            if (packet > 0) {
+                display_sendbuffer_finish();
+                ppi_clr(); // turn off cmd pin for all following transfers
+            }
 
+            display_sendbuffer_noblock(byteArray, byte);
 
+            byte = 0;
+            packet++;
+        }
+    }
 
+    if (byte != 0) { // if there is remaining data to be sent
         if (packet > 0) {
             display_sendbuffer_finish();
-            ppi_clr();
+            ppi_clr(); // turn off cmd pin for all following transfers
         }
+
         display_sendbuffer_noblock(byteArray, byte);
-
-        bytesToSend -= byte;
-
-        byte = 0;
-
-        packet++;
     }
     display_sendbuffer_finish();
+    ppi_clr();
+
 }
 
 void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
@@ -443,6 +449,7 @@ void scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
     NRF_TIMER3->CC[3] = 5+(8*6*2);
     NRF_TIMER3->CC[4] = 5+(8*10*2);
     NRF_TIMER3->CC[5] = 5+(8*11*2);
+    ppi_clr();
 }
 
 void partialMode(uint16_t PSL, uint16_t PEL) {

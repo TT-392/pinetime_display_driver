@@ -26,7 +26,7 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t *frame, uint16_t posColor,
  * bitmap is an array of 8 bit integers, 2 of these form a single pixel. RGB 565 
 (most significant byte first)
  */
-void drawBitmap (uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t* bitmap);
+void drawBitmap (uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t* bitmap);
 
 
 
