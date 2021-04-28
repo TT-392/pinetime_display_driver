@@ -346,11 +346,10 @@ void drawBitmap (uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t* bi
     }
 }
 
-
 void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
 
-    int maxLength = 254;
+    int maxLength = 255; // TODO: check why this value was originally 254
     uint8_t byteArray0[maxLength];
     uint8_t byteArray1[maxLength];
 
@@ -378,11 +377,28 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
 
     int area = (x2-x1+1)*(y2-y1+1);
 
-    int byte = 11;
+    int bit = 11 * 8;
     int bytesToSend = byte + area*2;
     int packet = 0;
+    int bitsppixel = 12;
+    int pixel = 0;
+    uint32_t mask = 0;
+
+    for (int i = 0; i < bitsppixel; i++) {
+        mask |= 1 << i;
+    }
 
     uint8_t* byteArray;
+
+    while (1) {
+        if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
+            color = posColor;
+        } else {
+            color = negColor;
+        }
+
+        byteArray[bit / 8]
+    }
 
     for (int pixel = 0; pixel < area; pixel++) {
         // use 2 arrays so that dma can keep sending while more data is being processed.
