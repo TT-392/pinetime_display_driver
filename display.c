@@ -5,6 +5,13 @@
 #include "display.h"
 #include "nrf_assert.h"
 
+#define ppi_set() NRF_PPI->CHENSET = 0xff; __disable_irq();// enable first 8 ppi channels
+#define ppi_clr() NRF_PPI->CHENCLR = 0xff; __enable_irq(); // disable first 8 ppi channels
+
+#define COLOR_18bit 0x06
+#define COLOR_16bit 0x05
+#define COLOR_12bit 0x03
+static uint8_t colorMode = COLOR_16bit;
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
@@ -73,8 +80,42 @@ void display_sendbuffer_finish() {
     while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
 }
 
-#define ppi_set() NRF_PPI->CHENSET = 0xff; __disable_irq();// enable first 8 ppi channels
-#define ppi_clr() NRF_PPI->CHENCLR = 0xff; __enable_irq(); // disable first 8 ppi channels
+void cmd_enable(bool enabled) {
+    if (enabled) {
+        // create GPIOTE task to switch LCD_COMMAND pin
+        NRF_GPIOTE->CONFIG[1] = GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos |
+            GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
+            LCD_COMMAND << GPIOTE_CONFIG_PSEL_Pos | 
+            GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
+        ppi_set();
+    } else {
+        NRF_GPIOTE->CONFIG[1] = 0;
+        ppi_clr();
+        nrf_gpio_cfg_output(LCD_COMMAND);
+    }
+}
+
+void colormode(uint8_t colormode) {
+    cmd_enable(0);
+    display_send (0, CMD_COLMOD);
+    display_send (1, colormode);
+    cmd_enable(1);
+    colorMode = colormode;
+}
+
+void cc_setup(int flip1, int flip2, int flip3, int flip4, int flip5, int flip6) {
+    // the following CC setup will cause byte 0, 5 and 10 
+    // of any SPIM0 dma transfer to be treated as CMD bytes
+    // offset from spim events started to first bit
+    // cmd pin gets sampled at end of byte, so we flip it in the middle for better stability
+    // 2 * 1 nibble = 8 = offset to get to middle of byte
+    NRF_TIMER3->CC[0] = 5 + 8 + (8 * flip1 * 2);
+    NRF_TIMER3->CC[1] = 5 + 8 + (8 * flip2 * 2);
+    NRF_TIMER3->CC[2] = 5 + 8 + (8 * flip3 * 2);
+    NRF_TIMER3->CC[3] = 5 + 8 + (8 * flip4 * 2);
+    NRF_TIMER3->CC[4] = 5 + 8 + (8 * flip5 * 2);
+    NRF_TIMER3->CC[5] = 5 + 8 + (8 * flip6 * 2);
+} // TODO: I am pretty sure there is no reason to have the first flip at 0, this is a wasted CC and ppi
 
 
 void display_init() {
@@ -97,17 +138,14 @@ void display_init() {
     ///////////////
     // spi setup //
     ///////////////
-
     NRF_SPIM0->PSEL.SCK  = LCD_SCK;
     NRF_SPIM0->PSEL.MOSI = LCD_MOSI;
     NRF_SPIM0->PSEL.MISO = LCD_MISO;
 
-    uint32_t config = (SPIM_CONFIG_ORDER_MsbFirst);
+    NRF_SPIM0->CONFIG = (SPIM_CONFIG_ORDER_MsbFirst  << SPIM_CONFIG_ORDER_Pos)|
+                        (SPIM_CONFIG_CPOL_ActiveLow  << SPIM_CONFIG_CPOL_Pos) |
+                        (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
 
-    config |= (SPIM_CONFIG_CPOL_ActiveLow  << SPIM_CONFIG_CPOL_Pos) |
-        (SPIM_CONFIG_CPHA_Trailing   << SPIM_CONFIG_CPHA_Pos);
-
-    NRF_SPIM0->CONFIG = config;
     NRF_SPIM0->FREQUENCY = SPIM_FREQUENCY_FREQUENCY_M8 << SPIM_FREQUENCY_FREQUENCY_Pos;
     NRF_SPIM0->ENABLE = SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos;
 
@@ -128,7 +166,7 @@ void display_init() {
     display_send (0, CMD_SLPOUT);
 
     display_send (0, CMD_COLMOD);
-    display_send (1, 0x55);
+    display_send (1, COLOR_16bit);
 
     display_send (0, CMD_MADCTL); 
     display_send (1, 0x00);
@@ -151,19 +189,7 @@ void display_init() {
 
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(8*0*2);
-    NRF_TIMER3->CC[1] = 5+(8*1*2);
-    NRF_TIMER3->CC[2] = 5+(8*5*2);
-    NRF_TIMER3->CC[3] = 5+(8*6*2);
-    NRF_TIMER3->CC[4] = 5+(8*10*2);
-    NRF_TIMER3->CC[5] = 5+(8*11*2);
-
-
-    // create GPIOTE task to switch LCD_COMMAND pin
-    NRF_GPIOTE->CONFIG[1] = GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos |
-        GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
-        LCD_COMMAND << GPIOTE_CONFIG_PSEL_Pos | 
-        GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
+    cc_setup(0,1,5,6,10,11);
 
 
     // PPI channels for toggeling pin
@@ -185,7 +211,7 @@ void display_init() {
     //  NRF_PPI->CH[8].EEP = (uint32_t) &NRF_TIMER3->EVENTS_COMPARE[5];
     //  NRF_PPI->CH[8].TEP = (uint32_t) &NRF_TIMER3->TASKS_STOP;
 
-
+    cmd_enable(1);
 }
 
 
@@ -352,7 +378,6 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
 
     int area = (x2-x1+1)*(y2-y1+1);
 
-
     int byte = 11;
     int bytesToSend = byte + area*2;
     int packet = 0;
@@ -402,18 +427,12 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     }
     display_sendbuffer_finish();
     ppi_clr();
-
 }
 
 void display_scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_value) {
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(8*0*2); // low
-    NRF_TIMER3->CC[1] = 5+(8*1*2); // high
-    NRF_TIMER3->CC[2] = 5+(8*7*2); // low
-    NRF_TIMER3->CC[3] = 5+(8*8*2); // high
-    NRF_TIMER3->CC[4] = 5+(8*9*2); // low
-    NRF_TIMER3->CC[5] = 5+(8*10*2); // high
+    cc_setup(0,1,7,8,9,10);
     ppi_set();
 
     uint8_t byteArray[12];
@@ -442,24 +461,14 @@ void display_scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_va
 
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(8*0*2);
-    NRF_TIMER3->CC[1] = 5+(8*1*2);
-    NRF_TIMER3->CC[2] = 5+(8*5*2);
-    NRF_TIMER3->CC[3] = 5+(8*6*2);
-    NRF_TIMER3->CC[4] = 5+(8*10*2);
-    NRF_TIMER3->CC[5] = 5+(8*11*2);
+    cc_setup(0,1,5,6,10,11);
     ppi_clr();
 }
 
 void partialMode(uint16_t PSL, uint16_t PEL) {
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(8*0*2); // low
-    NRF_TIMER3->CC[1] = 5+(8*1*2); // high
-    NRF_TIMER3->CC[2] = 5+(8*2*2); // low
-    NRF_TIMER3->CC[3] = 5+(8*3*2); // high
-    NRF_TIMER3->CC[4] = 5+(8*7*2); // low
-    NRF_TIMER3->CC[5] = 5+(8*50*2); // high (should never trigger)
+    cc_setup(0,1,2,3,7,50);
     ppi_set();
 
     uint8_t byteArray[12];
@@ -480,11 +489,6 @@ void partialMode(uint16_t PSL, uint16_t PEL) {
 
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
-    NRF_TIMER3->CC[0] = 5+(8*0*2);
-    NRF_TIMER3->CC[1] = 5+(8*1*2);
-    NRF_TIMER3->CC[2] = 5+(8*5*2);
-    NRF_TIMER3->CC[3] = 5+(8*6*2);
-    NRF_TIMER3->CC[4] = 5+(8*10*2);
-    NRF_TIMER3->CC[5] = 5+(8*11*2);
+    cc_setup(0,1,5,6,10,11);
     ppi_clr();
 }
