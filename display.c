@@ -6,7 +6,7 @@
 #include "nrf_assert.h"
 #include "semihost.h"
 #include "break.h"
-#include "systick.h"
+#include <string.h>
 
 #define ppi_set() NRF_PPI->CHENSET = 0xff; __disable_irq();// enable first 8 ppi channels
 #define ppi_clr() NRF_PPI->CHENCLR = 0xff; __enable_irq(); // disable first 8 ppi channels
@@ -16,6 +16,7 @@
 #define COLOR_12bit 0x03
 static uint8_t colorMode = COLOR_16bit;
 volatile uint64_t idleTime = 0;
+int wastedTime = 0;
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
@@ -78,18 +79,22 @@ void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
 // and before the next call of spim related functions. It will wait for spim to
 // finish and will then stop spim0
 void display_sendbuffer_finish() {
-    uint64_t startTime = cpuTime();
+    bool notWasted = 0;
     while(NRF_SPIM0->EVENTS_ENDTX == 0) {
         __NOP();
+        idleTime += 1;
+        notWasted = 1;
     }
     while(NRF_SPIM0->EVENTS_END == 0) {
         __NOP();
+        idleTime += 1;
+        notWasted = 1;
     }
     NRF_SPIM0->TASKS_STOP = 1;
     while (NRF_SPIM0->EVENTS_STOPPED == 0) {
         __NOP();
     }
-    idleTime += cpuTime() - startTime;
+    wastedTime += !notWasted;
 }
 
 void cmd_enable(bool enabled) {
@@ -365,7 +370,6 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     uint8_t byteArray0[maxLength];
     uint8_t byteArray1[maxLength];
 
-
     /* setup display for writing */
     byteArray0[0] = CMD_CASET;
 
@@ -386,75 +390,81 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     byteArray0[10] = CMD_RAMWR;
     /**/
 
-
     int area = (x2-x1+1)*(y2-y1+1);
 
-    int bit = 11 * 8;
+    int byte = 11;
     int bitsppixel = 12;
-    int pixel = 0;
+    int pixel = -1;
     int bitsToWrite = 0;
-    uint32_t mask = 0;
+    uint32_t mask = (1 << bitsppixel) - 1;
     uint32_t tempMask;
-    uint32_t color;
 
-    for (int i = 0; i < bitsppixel; i++) {
-        mask |= 1 << i;
-    }
     posColor &= mask;
     negColor &= mask;
 
     int packetNr = 0;
+
     uint8_t* byteArray = byteArray0;
 
-    breakPoint();
+    int bytesMod3 = 0;
+
+    bool color;
+
+    // 746
+    bool stop = 0;
     //semihost_print("drawmono\n", 9);
-    while (1) {
-        if (bitsToWrite == 0) { // next pixel
-            //semihost_print("pixel\n", 6);
-            if (pixel == area) {
+    while (!stop) {
+        uint8_t smallByte = 0;
+        if (bytesMod3 == 0) {
+            pixel++;
+            if (pixel == area)
                 break;
-            }
-            if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
-                color = posColor;
-            } else {
-                color = negColor;
-            }
-            bitsToWrite = bitsppixel;
-            tempMask = mask;
+
+            color = (frame[pixel >> 3] >> (pixel % 8)) & 1;
+            smallByte = color * 3;
+            bytesMod3 = 1;
+        } else if (bytesMod3 == 1) {
+            smallByte = color * 2;
 
             pixel++;
+
+            if (pixel == area) {
+                stop = 1;
+            } else {
+                color = (frame[pixel >> 3] >> (pixel % 8)) & 1;
+                smallByte |= color;
+            }
+            bytesMod3 = 2;
+        } else if (bytesMod3 == 2) {
+            smallByte = color * 3;
+            bytesMod3 = 0;
         }
 
-        int shift = bitsToWrite - (8 - (bit % 8));
-
-        if (shift > 0) {
-            byteArray[bit/8] &= ~(tempMask >> shift);
-            byteArray[bit/8] |= color >> shift;
-
-            color &= ~((color >> shift) << shift);
-            tempMask &= ~((tempMask >> shift) << shift);
-
-            bit += (bitsToWrite - shift);
-
-            bitsToWrite = shift;
-        } else {
-            byteArray[bit/8] &= ~(tempMask << -shift);
-            byteArray[bit/8] |= color << -shift;
-
-            bit += (bitsToWrite/* - shift*/);
-
-            bitsToWrite = 0;
+        switch (smallByte) {
+            case 0:
+                byteArray[byte] = 0x00;
+                break;
+            case 1:
+                byteArray[byte] = 0x0f;
+                break;
+            case 2:
+                byteArray[byte] = 0xf0;
+                break;
+            case 3:
+                byteArray[byte] = 0xff;
+                break;
         }
+        byte++;
 
 
-        if (bit / 8 == maxLength) {
+        if (byte == maxLength) {
             //semihost_print("packet\n", 7);
             if (packetNr > 0) {
                 display_sendbuffer_finish();
                 ppi_clr(); 
             }
 
-            display_sendbuffer_noblock(byteArray, (bit - 1) / 8 + 1);
+            display_sendbuffer_noblock(byteArray, byte);
 
             packetNr++;
             if (packetNr % 2 == 0)
@@ -462,17 +472,17 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
             else
                 byteArray = byteArray1;
 
-            bit = 0;
+            byte = 0;
         }
     }
-    if (bit != 0) { 
+    if (byte != 0) { 
         //semihost_print("Packet\n", 7);
         if (packetNr > 0) {
             display_sendbuffer_finish();
             ppi_clr(); 
         }
 
-        display_sendbuffer_noblock(byteArray, (bit - 1) / 8 + 1);
+        display_sendbuffer_noblock(byteArray, byte);
     }
     display_sendbuffer_finish();
     ppi_clr();
