@@ -15,8 +15,6 @@
 #define COLOR_16bit 0x05
 #define COLOR_12bit 0x03
 static uint8_t colorMode = COLOR_16bit;
-volatile uint64_t idleTime = 0;
-int wastedTime = 0;
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
@@ -79,22 +77,15 @@ void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
 // and before the next call of spim related functions. It will wait for spim to
 // finish and will then stop spim0
 void display_sendbuffer_finish() {
-    bool notWasted = 0;
-    while(NRF_SPIM0->EVENTS_ENDTX == 0) {
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) 
         __NOP();
-        idleTime += 1;
-        notWasted = 1;
-    }
-    while(NRF_SPIM0->EVENTS_END == 0) {
+
+    while(NRF_SPIM0->EVENTS_END == 0) 
         __NOP();
-        idleTime += 1;
-        notWasted = 1;
-    }
+
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0) {
+    while (NRF_SPIM0->EVENTS_STOPPED == 0)
         __NOP();
-    }
-    wastedTime += !notWasted;
 }
 
 void cmd_enable(bool enabled) {
@@ -396,11 +387,6 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     int bitsppixel = 12;
     int pixel = -1;
     int bitsToWrite = 0;
-    uint32_t mask = (1 << bitsppixel) - 1;
-    uint32_t tempMask;
-
-    posColor &= mask;
-    negColor &= mask;
 
     int packetNr = 0;
 
