@@ -4,6 +4,9 @@
 #include "display_defines.h"
 #include "display.h"
 #include "nrf_assert.h"
+#include "semihost.h"
+#include "break.h"
+#include "systick.h"
 
 #define ppi_set() NRF_PPI->CHENSET = 0xff; __disable_irq();// enable first 8 ppi channels
 #define ppi_clr() NRF_PPI->CHENCLR = 0xff; __enable_irq(); // disable first 8 ppi channels
@@ -12,10 +15,11 @@
 #define COLOR_16bit 0x05
 #define COLOR_12bit 0x03
 static uint8_t colorMode = COLOR_16bit;
+volatile uint64_t idleTime = 0;
 
 // placeholder for actual brightness control see https://forum.pine64.org/showthread.php?tid=9378, pwm is planned
 void display_backlight(char brightness) {
-    nrf_gpio_cfg_output(LCD_BACKLIGHT_HIGH);	
+    nrf_gpio_cfg_output(LCD_BACKLIGHT_HIGH);
     if (brightness != 0) {
         nrf_gpio_pin_write(LCD_BACKLIGHT_HIGH,0);
     } else {
@@ -74,10 +78,18 @@ void display_sendbuffer_noblock(uint8_t* m_tx_buf, int m_length) {
 // and before the next call of spim related functions. It will wait for spim to
 // finish and will then stop spim0
 void display_sendbuffer_finish() {
-    while(NRF_SPIM0->EVENTS_ENDTX == 0) __NOP();
-    while(NRF_SPIM0->EVENTS_END == 0) __NOP();
+    uint64_t startTime = cpuTime();
+    while(NRF_SPIM0->EVENTS_ENDTX == 0) {
+        __NOP();
+    }
+    while(NRF_SPIM0->EVENTS_END == 0) {
+        __NOP();
+    }
     NRF_SPIM0->TASKS_STOP = 1;
-    while (NRF_SPIM0->EVENTS_STOPPED == 0) __NOP();
+    while (NRF_SPIM0->EVENTS_STOPPED == 0) {
+        __NOP();
+    }
+    idleTime += cpuTime() - startTime;
 }
 
 void cmd_enable(bool enabled) {
@@ -95,7 +107,7 @@ void cmd_enable(bool enabled) {
     }
 }
 
-void colormode(uint8_t colormode) {
+void set_colormode(uint8_t colormode) {
     cmd_enable(0);
     display_send (0, CMD_COLMOD);
     display_send (1, colormode);
@@ -166,7 +178,7 @@ void display_init() {
     display_send (0, CMD_SLPOUT);
 
     display_send (0, CMD_COLMOD);
-    display_send (1, COLOR_16bit);
+    display_send (1, COLOR_12bit);
 
     display_send (0, CMD_MADCTL); 
     display_send (1, 0x00);
@@ -349,7 +361,7 @@ void drawBitmap (uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t* bi
 void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor, uint16_t negColor) {
     ppi_set();
 
-    int maxLength = 255; // TODO: check why this value was originally 254
+    int maxLength = 255; 
     uint8_t byteArray0[maxLength];
     uint8_t byteArray1[maxLength];
 
@@ -378,68 +390,89 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     int area = (x2-x1+1)*(y2-y1+1);
 
     int bit = 11 * 8;
-    int bytesToSend = byte + area*2;
-    int packet = 0;
     int bitsppixel = 12;
     int pixel = 0;
+    int bitsToWrite = 0;
     uint32_t mask = 0;
+    uint32_t tempMask;
+    uint32_t color;
 
     for (int i = 0; i < bitsppixel; i++) {
         mask |= 1 << i;
     }
+    posColor &= mask;
+    negColor &= mask;
 
-    uint8_t* byteArray;
+    int packetNr = 0;
+    uint8_t* byteArray = byteArray0;
 
+    breakPoint();
+    //semihost_print("drawmono\n", 9);
     while (1) {
-        if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
-            color = posColor;
-        } else {
-            color = negColor;
+        if (bitsToWrite == 0) { // next pixel
+            //semihost_print("pixel\n", 6);
+            if (pixel == area) {
+                break;
+            }
+            if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
+                color = posColor;
+            } else {
+                color = negColor;
+            }
+            bitsToWrite = bitsppixel;
+            tempMask = mask;
+
+            pixel++;
         }
 
-        byteArray[bit / 8]
-    }
+        int shift = bitsToWrite - (8 - (bit % 8));
 
-    for (int pixel = 0; pixel < area; pixel++) {
-        // use 2 arrays so that dma can keep sending while more data is being processed.
-        if (packet % 2 == 0) 
-            byteArray = byteArray0;
-        else 
-            byteArray = byteArray1;
+        if (shift > 0) {
+            byteArray[bit/8] &= ~(tempMask >> shift);
+            byteArray[bit/8] |= color >> shift;
 
-        // write a pixel from the mono bitmap to the color bitmap(byteArray)
-        uint16_t color = 0;
-        if ((frame[pixel / 8] >> (pixel % 8)) & 1) {
-            color = posColor;
+            color &= ~((color >> shift) << shift);
+            tempMask &= ~((tempMask >> shift) << shift);
+
+            bit += (bitsToWrite - shift);
+
+            bitsToWrite = shift;
         } else {
-            color = negColor;
+            byteArray[bit/8] &= ~(tempMask << -shift);
+            byteArray[bit/8] |= color << -shift;
+
+            bit += (bitsToWrite/* - shift*/);
+
+            bitsToWrite = 0;
         }
-        byteArray[byte] = color >> 8;
-        byte++;
-        byteArray[byte] = color;
-        byte++;
-        
-        // if first array is full
-        if (byte >= maxLength - 1) {
-            if (packet > 0) {
+
+
+        if (bit / 8 == maxLength) {
+            //semihost_print("packet\n", 7);
+            if (packetNr > 0) {
                 display_sendbuffer_finish();
-                ppi_clr(); // turn off cmd pin for all following transfers
+                ppi_clr(); 
             }
 
-            display_sendbuffer_noblock(byteArray, byte);
+            display_sendbuffer_noblock(byteArray, (bit - 1) / 8 + 1);
 
-            byte = 0;
-            packet++;
+            packetNr++;
+            if (packetNr % 2 == 0)
+                byteArray = byteArray0;
+            else
+                byteArray = byteArray1;
+
+            bit = 0;
         }
     }
-
-    if (byte != 0) { // if there is remaining data to be sent
-        if (packet > 0) {
+    if (bit != 0) { 
+        //semihost_print("Packet\n", 7);
+        if (packetNr > 0) {
             display_sendbuffer_finish();
-            ppi_clr(); // turn off cmd pin for all following transfers
+            ppi_clr(); 
         }
 
-        display_sendbuffer_noblock(byteArray, byte);
+        display_sendbuffer_noblock(byteArray, (bit - 1) / 8 + 1);
     }
     display_sendbuffer_finish();
     ppi_clr();
