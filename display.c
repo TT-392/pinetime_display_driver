@@ -146,6 +146,7 @@ void display_init() {
     ///////////////
     // spi setup //
     ///////////////
+    NRF_SPIM0->ENABLE = SPIM_ENABLE_ENABLE_Disabled << SPIM_ENABLE_ENABLE_Pos;
     NRF_SPIM0->PSEL.SCK  = LCD_SCK;
     NRF_SPIM0->PSEL.MOSI = LCD_MOSI;
     NRF_SPIM0->PSEL.MISO = LCD_MISO;
@@ -222,6 +223,14 @@ void display_init() {
     cmd_enable(1);
 }
 
+void display_pause() {
+    cmd_enable(0);
+    nrf_gpio_pin_write(LCD_SELECT,1);
+}
+void display_resume() {
+    cmd_enable(1);
+    nrf_gpio_pin_write(LCD_SELECT,0);
+}
 
 void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color) {
     ppi_set();

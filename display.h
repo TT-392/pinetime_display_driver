@@ -37,3 +37,6 @@ void display_scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_va
  */
 void partialMode(uint16_t PSL, uint16_t PEL);
 
+void display_pause();
+void display_resume();
+
