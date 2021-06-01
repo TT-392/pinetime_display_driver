@@ -1,5 +1,6 @@
 #pragma once
 #include "stdint.h"
+#include "stdbool.h"
 
 /*
  * Function to init the display, 
@@ -36,6 +37,8 @@ void display_scroll(uint16_t TFA, uint16_t VSA, uint16_t BFA, uint16_t scroll_va
  * the following function currently doesn't work
  */
 void partialMode(uint16_t PSL, uint16_t PEL);
+
+void flip (bool flipped);
 
 void display_pause();
 void display_resume();

@@ -111,6 +111,16 @@ void set_colormode(uint8_t colormode) {
     colorMode = colormode;
 }
 
+void flip (bool flipped) {
+    cmd_enable(0);
+    if (flipped)
+        display_send (0, CMD_INVON);
+    if (!flipped)
+        display_send (0, CMD_INVOFF);
+
+    cmd_enable(1);
+}
+
 void cc_setup(int flip1, int flip2, int flip3, int flip4, int flip5, int flip6) {
     // the following CC setup will cause byte 0, 5 and 10 
     // of any SPIM0 dma transfer to be treated as CMD bytes
@@ -437,20 +447,19 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
 
         switch (smallByte) {
             case 0:
-                byteArray[byte] = 0x00;
+                byteArray[byte] = 0xff;
                 break;
             case 1:
-                byteArray[byte] = 0x0f;
-                break;
-            case 2:
                 byteArray[byte] = 0xf0;
                 break;
+            case 2:
+                byteArray[byte] = 0x0f;
+                break;
             case 3:
-                byteArray[byte] = 0xff;
+                byteArray[byte] = 0x00;
                 break;
         }
         byte++;
-
 
         if (byte == maxLength) {
             //semihost_print("packet\n", 7);
