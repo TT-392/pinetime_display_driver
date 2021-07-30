@@ -1,4 +1,5 @@
 #define stableDisplay
+
 #ifdef stableDisplay
 #include "display_stable.c"
 #else

@@ -241,10 +241,9 @@ void display_resume() {
 }
 
 void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color) {
-    int maxLength = 254; 
-    uint8_t byteArray [maxLength + 1];
+    ppi_clr();
+    cmd_enable(0);
 
-    // addresses are offset by 1 to give the ability to recycle the array
     /* setup display for writing */
     display_send(0, CMD_CASET);
 
@@ -263,44 +262,20 @@ void drawSquare(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t col
     display_send(1, y2 & 0xff);
 
     display_send(0, CMD_RAMWR);
-    /* setup display for writing */
+    /**/
 
     int area = (x2-x1+1)*(y2-y1+1);
+    int pixel = 0;
 
-    int areaToWrite;
-    if (area > (maxLength - 0) / 2)
-        areaToWrite = (maxLength - 0) / 2;
-    else 
-        areaToWrite = area;
+    while (pixel != area) {
+        display_send(1, color >> 8);
+        display_send(1, color & 0xff);
+        
+        pixel++;
 
-    for (int i = 0; i < areaToWrite; i++) {
-        byteArray[12+i*2] = color >> 8;
-        byteArray[12+i*2+1] = color & 0xff;
     }
-
-    area -= areaToWrite;
-
-    // non blocking SPI here is negligible and unreliable cause stuff 
-    // would be written memory while sending that same memory
-    display_sendbuffer(0, byteArray + 1, (areaToWrite * 2)+11);
-
-    if (area > 0) {
-        for (int i = 0; i < 6; i++) {
-            byteArray[i*2] = color >> 8;
-            byteArray[i*2+1] = color;
-        }
-
-        while (area > 0) {
-            if (area > maxLength / 2)
-                areaToWrite = maxLength / 2;
-            else 
-                areaToWrite = area;
-
-            area -= areaToWrite;
-
-            display_sendbuffer(0, byteArray, areaToWrite * 2);
-        }
-    }
+    ppi_clr();
+    cmd_enable(1);
 }
 
 
@@ -371,8 +346,6 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     ppi_clr();
     cmd_enable(0);
 
-    int maxLength = 255; 
-
     /* setup display for writing */
     display_send(0, CMD_CASET);
 
@@ -394,17 +367,7 @@ void drawMono(int x1, int y1, int x2, int y2, uint8_t* frame, uint16_t posColor,
     /**/
 
     int area = (x2-x1+1)*(y2-y1+1);
-
-    int byte = 1;
-    int bitsppixel = 12;
     int pixel = 0;
-    int bitsToWrite = 0;
-
-    int packetNr = 0;
-
-    int bytesMod3 = 0;
-
-    bool color;
 
     while (pixel != area) {
         if ((frame[pixel / 8] >> pixel % 8) & 1) {
